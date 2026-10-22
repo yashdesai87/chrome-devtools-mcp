@@ -19,6 +19,7 @@ import {ServiceWorkerConsoleCollector} from '../src/collectors/ServiceWorkerColl
 import {NetworkFormatter} from '../src/formatters/NetworkFormatter.js';
 import {McpContext} from '../src/McpContext.js';
 import {McpPage} from '../src/McpPage.js';
+import {SessionTabGroups} from '../src/SessionTabGroups.js';
 import {HeapSnapshotManager} from '../src/processors/HeapSnapshotManager.js';
 import {TaskRunner} from '../src/utils/TaskRunner.js';
 import {TextSnapshot} from '../src/TextSnapshot.js';
@@ -124,6 +125,51 @@ describe('McpContext', () => {
       Locator,
     );
   }
+
+  it('groups only explicitly created tabs and retains their background setting', async () => {
+    const addPage = sinon
+      .stub(SessionTabGroups.prototype, 'addPage')
+      .resolves();
+    const browser = createMockPuppeteerBrowser();
+    const {page, target} = createPageTarget();
+    browser.newPage.resolves(page);
+    const context = await createMockContext({browser, targets: [target]});
+    try {
+      sinon.assert.notCalled(addPage);
+      const created = await context.newPage(true);
+
+      sinon.assert.calledOnceWithExactly(browser.newPage, {background: true});
+      sinon.assert.calledOnceWithExactly(
+        addPage,
+        browser,
+        page,
+        created.targetId,
+      );
+      sinon.assert.notCalled(page.bringToFront);
+    } finally {
+      context.dispose();
+    }
+  });
+
+  it('keeps the created tab usable when automatic grouping fails', async () => {
+    sinon
+      .stub(SessionTabGroups.prototype, 'addPage')
+      .rejects(new Error('Grouping failed'));
+    const browser = createMockPuppeteerBrowser();
+    const {page, target} = createPageTarget();
+    browser.newPage.resolves(page);
+    const context = await createMockContext({browser, targets: [target]});
+    try {
+      await assert.rejects(
+        context.newPage(true),
+        /was created, but automatic tab grouping failed/,
+      );
+      assert.strictEqual(context.getSelectedMcpPage().pptrPage, page);
+      sinon.assert.notCalled(page.close);
+    } finally {
+      context.dispose();
+    }
+  });
 
   describe('getServiceWorkerConsoleData', () => {
     it('resolves the service worker ID to the collector extension ID', async () => {

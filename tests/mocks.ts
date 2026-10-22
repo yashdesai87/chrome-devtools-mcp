@@ -214,6 +214,7 @@ export function createMockPuppeteerBrowser(): sinon.SinonStubbedInstance<Browser
   browser.pages.resolves([]);
   browser.targets.returns([]);
   browser.browserContexts.returns([]);
+  browser.extensions.resolves(new Map());
   browser.process.returns(null);
 
   const browserListener = mockListener();
@@ -259,8 +260,8 @@ export class MockCDPSession extends CDPSession {
   }
 }
 
-export function createMockCDPSession(): sinon.SinonStubbedInstance<MockCDPSession> {
-  const session = sinon.createStubInstance(MockCDPSession);
+export function createMockCDPSession(): sinon.SinonStubbedInstance<CDPSession> {
+  const session = sinon.createStubInstance<CDPSession>(MockCDPSession);
   const connection = sinon.createStubInstance(Connection);
   connection.session.returns(session);
   session.connection.returns(connection);

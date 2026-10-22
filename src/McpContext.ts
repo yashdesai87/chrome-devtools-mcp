@@ -21,6 +21,7 @@ import type {
   HeapQueryOptions,
 } from './processors/HeapSnapshotManager.js';
 import {McpPage} from './McpPage.js';
+import {SessionTabGroups} from './SessionTabGroups.js';
 import {type UncaughtError} from './collectors/PageCollector.js';
 import {ServiceWorkerConsoleCollector} from './collectors/ServiceWorkerCollector.js';
 import {
@@ -58,6 +59,7 @@ import type {TraceResult} from './processors/PerformanceTrace.js';
 import type {Logger} from './types.js';
 import {McpWorker} from './McpWorker.js';
 import {getTempFilePath, resolveCanonicalPath} from './utils/files.js';
+import {getErrorMessage} from './utils/errorHandling.js';
 import {escapeForLog} from './utils/logger.js';
 import type {TaskQueue, TaskRunner} from './utils/TaskRunner.js';
 import {isAllowedUrl} from './utils/url.js';
@@ -157,6 +159,7 @@ export class McpContext implements Context, BrowserlessContext {
   #workers = new Map<Target, McpWorker>();
 
   #mcpPages = new Map<Target, McpPage>();
+  #sessionTabGroups = new SessionTabGroups();
   /**
    * Queue for the browser-wide state (page list, selected page, trace
    * state). Every page queue is a child of it, so a task on it waits for
@@ -595,6 +598,18 @@ export class McpContext implements Context, BrowserlessContext {
     const mcpPage = this.#createMcpPage(page.target());
     await mcpPage.init({emulateFocus: true});
     this.selectPage(mcpPage);
+    try {
+      await this.#sessionTabGroups.addPage(
+        this.browser,
+        page,
+        mcpPage.targetId,
+      );
+    } catch (cause) {
+      throw new Error(
+        `Page ${mcpPage.id} was created, but automatic tab grouping failed: ${getErrorMessage(cause)}. Use this page instead of creating another.`,
+        {cause},
+      );
+    }
     await this.createPagesSnapshot();
     return mcpPage;
   }
